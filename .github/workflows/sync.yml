@@ -29,16 +29,34 @@ jobs:
           git remote add upstream https://github.com/cmliu/edgetunnel.git
           git fetch upstream main
 
+          # 上游每次发版都会改 wrangler.toml 第 1 行的 name，属于已知必撞冲突。
+          # 处理办法：先整个采用上游版本（这样既清掉冲突标记，也保住上游新增的其它字段），
+          # 再把 name 单独写回本地固定值。这一处没有判断成本，不占人工。
+          fix_name() {
+            git checkout --theirs wrangler.toml 2>/dev/null || true
+            sed -i "s/^name = .*/name = 'edgetunnel'/" wrangler.toml
+            git add wrangler.toml
+          }
+
           if git diff --quiet HEAD upstream/main; then
             # 内容和上游一致，直接对齐，顺带清理历史分叉留下的多余 merge commit
             git reset --hard upstream/main
+            fix_name
+            git commit -m "chore: 保持项目名为 edgetunnel" || true
             git push --force-with-lease origin main
           else
             # 有本地修改，保持原来的合并方式，不覆盖任何人的改动
             if ! git pull --no-rebase upstream main; then
-              echo "[Error] 合并上游变更产生冲突，自动同步已暂停，请手动 Sync Fork 并解决冲突。"
-              echo "[Error] Merge conflict detected while syncing upstream. Please sync your fork manually and resolve the conflicts."
-              exit 1
+              fix_name
+              # 除 wrangler.toml 之外还有冲突，照旧停下来交给人工处理
+              if [ -n "$(git diff --name-only --diff-filter=U | grep -v '^wrangler.toml$')" ]; then
+                echo "[Error] 合并上游变更产生冲突，自动同步已暂停，请手动 Sync Fork 并解决冲突。"
+                echo "[Error] Merge conflict detected while syncing upstream. Please sync your fork manually and resolve the conflicts."
+                exit 1
+              fi
+              git commit --no-edit
             fi
+            fix_name
+            git commit -m "chore: 保持项目名为 edgetunnel" || true
             git push origin main
           fi
