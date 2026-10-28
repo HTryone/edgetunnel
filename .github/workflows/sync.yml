@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "0 0 * * *" # every day
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'wrangler.toml'
+      - '.github/workflows/sync.yml'
 
 jobs:
   sync_latest_from_upstream:
@@ -35,6 +40,8 @@ jobs:
           fix_name() {
             git checkout --theirs wrangler.toml 2>/dev/null || true
             sed -i "s/^name = .*/name = 'edgetunnel'/" wrangler.toml
+            # 上游的 KV 段是注释状态，同步后必须恢复本地已填好 id 的启用状态，否则部署会再次丢 KV 绑定
+            sed -i 's/^#\[\[kv_namespaces\]\]/[[kv_namespaces]]/; s/^#binding = "KV"/binding = "KV"/; s/^#id = ""/id = "0bd6012810474adab71452ba35e9e994"/' wrangler.toml
             git add wrangler.toml
           }
 
